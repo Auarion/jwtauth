@@ -33,8 +33,8 @@ type DBConfig struct {
 }
 
 type AuthConfig struct {
-	jwtKey   []byte
-	dbConfig DBConfig
+	JwtKey   []byte
+	DbConfig DBConfig
 }
 
 type LoginResponse struct {
@@ -61,7 +61,7 @@ var authConfig = AuthConfig{
 
 func SetAuthConfig(cfg AuthConfig) {
 	authConfig = cfg
-	internal.SetDBConfig(internal.Config(cfg.dbConfig))
+	internal.SetDBConfig(internal.Config(cfg.DbConfig))
 }
 
 // Login
@@ -125,8 +125,8 @@ func Login(w http.ResponseWriter, r *http.Request) {
 
 	exp := time.Now().Add(15 * time.Minute)
 	claims := &Claims{Username: credentials.Username, RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: jwt.NewNumericDate(exp)}}
-	t, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(authConfig.jwtKey)
-	refresh, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, &Claims{Username: credentials.Username, RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: refreshExpiration}}).SignedString(authConfig.jwtKey)
+	t, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(authConfig.JwtKey)
+	refresh, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, &Claims{Username: credentials.Username, RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: refreshExpiration}}).SignedString(authConfig.JwtKey)
 
 	// store token in DB
 	err = repo.AddRefreshToken(r.Context(), internal.AddRefreshTokenDTO{
@@ -150,7 +150,7 @@ func Refresh(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing token", 401)
 		return
 	}
-	_, err := jwt.ParseWithClaims(token[7:], &Claims{}, func(t *jwt.Token) (interface{}, error) { return authConfig.jwtKey, nil })
+	_, err := jwt.ParseWithClaims(token[7:], &Claims{}, func(t *jwt.Token) (interface{}, error) { return authConfig.JwtKey, nil })
 	if err != nil {
 		http.Error(w, "invalid token", 401)
 		return
@@ -170,7 +170,7 @@ func Auth(next http.HandlerFunc) http.HandlerFunc {
 			http.Error(w, "missing token", 401)
 			return
 		}
-		jwttoken, err := jwt.ParseWithClaims(token[7:], &Claims{}, func(t *jwt.Token) (interface{}, error) { return authConfig.jwtKey, nil })
+		jwttoken, err := jwt.ParseWithClaims(token[7:], &Claims{}, func(t *jwt.Token) (interface{}, error) { return authConfig.JwtKey, nil })
 
 		if !jwttoken.Valid {
 			if err != nil {
