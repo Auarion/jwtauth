@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"jwtauth/internal"
+
 	"net/http"
 	"time"
 
+	"github.com/Auarion/jwtauth/internal"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
