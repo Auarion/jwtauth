@@ -1,4 +1,4 @@
-module jwtauth
+module github.com/Auarion/jwtauth
 
 go 1.26.3
 
