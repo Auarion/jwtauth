@@ -163,7 +163,7 @@ func (r *AuthRepository) AuthenticateUser(
 		dto.Password,
 		&hashedPassword,
 		&userid,
-	).Scan(&hashedPassword)
+	).Scan(&hashedPassword, &userid)
 
 	if err != nil || hashedPassword == "" {
 		return "", -1, err
