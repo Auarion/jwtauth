@@ -13,38 +13,15 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-func RegisterAuthRoutes(mux *http.ServeMux, basePath string) {
-	mux.HandleFunc(basePath+"/login", Login)
-	mux.HandleFunc(basePath+"/refresh", Refresh)
-}
-
+// Configuration
 type Claims struct {
 	Username string `json:"username"`
 	jwt.RegisteredClaims
 }
 
-type DBConfig struct {
-	Host     string
-	Port     int
-	User     string
-	Password string
-	Database string
-	SSLMode  string
-}
-
 type AuthConfig struct {
 	JwtKey   []byte
 	DbConfig DBConfig
-}
-
-type LoginResponse struct {
-	Token   string `json:"access_token"`
-	Refresh string `json:"refresh_token"`
-}
-
-type ErrorResponse struct {
-	Error   string `json:"error"`
-	Message string `json:"message"`
 }
 
 var authConfig = AuthConfig{
@@ -59,15 +36,46 @@ var authConfig = AuthConfig{
 	},
 }
 
+type DBConfig struct {
+	Host     string
+	Port     int
+	User     string
+	Password string
+	Database string
+	SSLMode  string
+}
+
 func SetAuthConfig(cfg AuthConfig) {
 	authConfig = cfg
 	internal.SetDBConfig(internal.Config(cfg.DbConfig))
 }
 
+// APIs
+
+type AuthenticateUser struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type LoginResponse struct {
+	Token   string `json:"access_token"`
+	Refresh string `json:"refresh_token"`
+}
+
+type ErrorResponse struct {
+	Error   string `json:"error"`
+	Message string `json:"message"`
+}
+
+func RegisterAuthRoutes(mux *http.ServeMux, basePath string) {
+	mux.HandleFunc(basePath+"/login", Login)
+	mux.HandleFunc(basePath+"/refresh", Refresh)
+}
+
 // Login
 //
-// @Summary Login utente
-// @Description Autenticazione JWT
+// @Summary Login request
+// @Description JWT authentication and tokens release
 // @Tags Authentication
 // @Accept json
 // @Produce json
@@ -77,7 +85,7 @@ func SetAuthConfig(cfg AuthConfig) {
 // @Router /auth/login [post]
 func Login(w http.ResponseWriter, r *http.Request) {
 
-	var credentials internal.AuthenticateUserDTO
+	var credentials AuthenticateUser
 
 	if err := json.NewDecoder(r.Body).Decode(&credentials); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -95,7 +103,10 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		auditAccess(r.Context(), repo, userid, r.RemoteAddr, r.Header["User-Agent"][0], success)
 	}()
 
-	hashedPassword, err = repo.AuthenticateUser(r.Context(), credentials)
+	hashedPassword, err = repo.AuthenticateUser(r.Context(), internal.AuthenticateUserDTO{
+		Username: credentials.Username,
+		Password: credentials.Password,
+	})
 
 	if err != nil || hashedPassword == "" {
 		http.Error(w, "authentication error", 401)

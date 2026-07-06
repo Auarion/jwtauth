@@ -103,7 +103,7 @@ func Repository() *AuthRepository {
 }
 
 type UserMapDTO struct {
-	Username string `json:"username"`
+	Username string
 }
 
 func (r *AuthRepository) UserMap(
@@ -135,8 +135,8 @@ func (r *AuthRepository) UserMap(
 }
 
 type AuthenticateUserDTO struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Username string
+	Password string
 }
 
 func (r *AuthRepository) AuthenticateUser(
@@ -170,9 +170,9 @@ func (r *AuthRepository) AuthenticateUser(
 }
 
 type AddRefreshTokenDTO struct {
-	UserID    int64     `json:"userId"`
-	Token     string    `json:"token"`
-	ExpiresAt time.Time `json:"expiresAt"`
+	UserID    int64
+	Token     string
+	ExpiresAt time.Time
 }
 
 func (r *AuthRepository) AddRefreshToken(
@@ -200,11 +200,11 @@ func (r *AuthRepository) AddRefreshToken(
 }
 
 type AddUserAuditDTO struct {
-	UserID    int64     `json:"userId"`
-	LoginDate time.Time `json:"loginDate,omitempty"`
-	IPAddress *string   `json:"ipAddress,omitempty"`
-	UserAgent *string   `json:"userAgent,omitempty"`
-	Success   bool      `json:"success"`
+	UserID    int64
+	LoginDate time.Time
+	IPAddress *string
+	UserAgent *string
+	Success   bool
 }
 
 func (r *AuthRepository) AddUserAudit(
@@ -240,7 +240,7 @@ func (r *AuthRepository) AddUserAudit(
 }
 
 type RevokeRefreshTokenDTO struct {
-	Token string `json:"token"`
+	Token string
 }
 
 func (r *AuthRepository) RevokeRefreshToken(
@@ -264,8 +264,8 @@ func (r *AuthRepository) RevokeRefreshToken(
 }
 
 type ChangePasswordDTO struct {
-	UserID         int64  `json:"userId"`
-	HashedPassword string `json:"hashedPassword"`
+	UserID         int64
+	HashedPassword string
 }
 
 func (r *AuthRepository) ChangePassword(
