@@ -21,8 +21,8 @@ type Claims struct {
 
 type AuthConfig struct {
 	JwtKey               []byte
-	tokenExpirationMin   int32
-	refreshExpirationMin int32
+	TokenExpirationMin   int32
+	RefreshExpirationMin int32
 	DbConfig             DBConfig
 }
 
@@ -243,13 +243,13 @@ func Auth(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func generateTokens(username string) (string, string, *jwt.NumericDate) {
-	var refreshExpiration *jwt.NumericDate = jwt.NewNumericDate(time.Now().Add(time.Duration(authConfig.refreshExpirationMin) * time.Minute))
+	var refreshExpiration *jwt.NumericDate = jwt.NewNumericDate(time.Now().Add(time.Duration(authConfig.RefreshExpirationMin) * time.Minute))
 
-	exp := time.Now().Add(time.Duration(authConfig.tokenExpirationMin) * time.Minute)
+	exp := time.Now().Add(time.Duration(authConfig.TokenExpirationMin) * time.Minute)
 	claims := &Claims{Username: username, RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: jwt.NewNumericDate(exp)}}
 	token, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(authConfig.JwtKey)
 
-	exp = time.Now().Add(time.Duration(authConfig.refreshExpirationMin) * time.Minute)
+	exp = time.Now().Add(time.Duration(authConfig.RefreshExpirationMin) * time.Minute)
 	claims = &Claims{Username: username, RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: refreshExpiration}}
 	refresh, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(authConfig.JwtKey)
 
