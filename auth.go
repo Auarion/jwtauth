@@ -190,12 +190,6 @@ func Refresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jwttoken, err := jwt.ParseWithClaims(token[7:], &Claims{}, func(t *jwt.Token) (interface{}, error) { return authConfig.JwtKey, nil })
-	if err != nil {
-		tokenError(err, w)
-		return
-	}
-
-	// Check refresh token
 
 	if !jwttoken.Valid {
 		tokenError(err, w)
@@ -253,10 +247,13 @@ func generateTokens(username string) (string, string, *jwt.NumericDate) {
 
 	exp := time.Now().Add(time.Duration(authConfig.tokenExpirationMin) * time.Minute)
 	claims := &Claims{Username: username, RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: jwt.NewNumericDate(exp)}}
-	t, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(authConfig.JwtKey)
-	refresh, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, &Claims{Username: username, RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: refreshExpiration}}).SignedString(authConfig.JwtKey)
+	token, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(authConfig.JwtKey)
 
-	return t, refresh, refreshExpiration
+	exp = time.Now().Add(time.Duration(authConfig.refreshExpirationMin) * time.Minute)
+	claims = &Claims{Username: username, RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: refreshExpiration}}
+	refresh, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(authConfig.JwtKey)
+
+	return token, refresh, refreshExpiration
 }
 
 func tokenError(err error, w http.ResponseWriter) {
