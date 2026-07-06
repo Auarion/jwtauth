@@ -142,17 +142,19 @@ type AuthenticateUserDTO struct {
 func (r *AuthRepository) AuthenticateUser(
 	ctx context.Context,
 	dto AuthenticateUserDTO,
-) (string, error) {
+) (string, int64, error) {
 
 	query := `
         call public.auth_user_authenticate(
             $1,
             $2,
-			$3
+			$3,
+			$4
         )
     `
 
 	var hashedPassword string
+	var userid int64
 
 	err := r.DB.QueryRowContext(
 		ctx,
@@ -160,13 +162,14 @@ func (r *AuthRepository) AuthenticateUser(
 		dto.Username,
 		dto.Password,
 		&hashedPassword,
+		&userid,
 	).Scan(&hashedPassword)
 
 	if err != nil || hashedPassword == "" {
-		return "", err
+		return "", -1, err
 	}
 
-	return hashedPassword, nil
+	return hashedPassword, userid, nil
 }
 
 type AddRefreshTokenDTO struct {
@@ -205,6 +208,7 @@ type AddUserAuditDTO struct {
 	IPAddress *string
 	UserAgent *string
 	Success   bool
+	Reason    int
 }
 
 func (r *AuthRepository) AddUserAudit(
@@ -219,7 +223,8 @@ func (r *AuthRepository) AddUserAudit(
 				$2,
 				$3,
 				$4,
-				$5
+				$5,
+				$6
 			)
 		`
 
@@ -231,6 +236,7 @@ func (r *AuthRepository) AddUserAudit(
 			dto.IPAddress,
 			dto.UserAgent,
 			dto.Success,
+			dto.Reason,
 		)
 
 		return err

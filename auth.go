@@ -20,20 +20,10 @@ type Claims struct {
 }
 
 type AuthConfig struct {
-	JwtKey   []byte
-	DbConfig DBConfig
-}
-
-var authConfig = AuthConfig{
-	[]byte("super-secret-signing-key"),
-	DBConfig{
-		"localhost",
-		5432,
-		"auth",
-		"auth",
-		"Auth",
-		"",
-	},
+	JwtKey               []byte
+	tokenExpirationMin   int32
+	refreshExpirationMin int32
+	DbConfig             DBConfig
 }
 
 type DBConfig struct {
@@ -43,6 +33,20 @@ type DBConfig struct {
 	Password string
 	Database string
 	SSLMode  string
+}
+
+var authConfig = AuthConfig{
+	[]byte("super-secret-signing-key"),
+	15,
+	60 * 24,
+	DBConfig{
+		"localhost",
+		5432,
+		"auth",
+		"auth",
+		"Auth",
+		"",
+	},
 }
 
 func SetAuthConfig(cfg AuthConfig) {
@@ -79,7 +83,7 @@ func RegisterAuthRoutes(mux *http.ServeMux, basePath string) {
 // @Tags Authentication
 // @Accept json
 // @Produce json
-// @Param request body authdto.AuthenticateUserDTO true "Credenziali"
+// @Param request body authdto.AuthenticateUser true "User credentials"
 // @Success 200 {object} LoginResponse
 // @Failure 401 {string} string
 // @Router /auth/login [post]
@@ -100,16 +104,22 @@ func Login(w http.ResponseWriter, r *http.Request) {
 
 	// audit the access at the end of the function
 	defer func() {
-		auditAccess(r.Context(), repo, userid, r.RemoteAddr, r.Header["User-Agent"][0], success)
+		auditAccess(r.Context(), repo, userid, r.RemoteAddr, r.Header["User-Agent"][0], success, 0)
 	}()
 
-	hashedPassword, err = repo.AuthenticateUser(r.Context(), internal.AuthenticateUserDTO{
+	hashedPassword, userid, err = repo.AuthenticateUser(r.Context(), internal.AuthenticateUserDTO{
 		Username: credentials.Username,
 		Password: credentials.Password,
 	})
 
 	if err != nil || hashedPassword == "" {
-		http.Error(w, "authentication error", 401)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "auth_error",
+			Message: "Authentication error",
+		})
 		return
 	}
 
@@ -119,25 +129,17 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err != nil {
-		http.Error(w, "authentication error", 401)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "auth_error",
+			Message: "Authentication error",
+		})
 		return
 	}
 
-	userid, err = repo.UserMap(r.Context(), internal.UserMapDTO{
-		Username: credentials.Username,
-	})
-
-	if err != nil {
-		http.Error(w, "internal error", 500)
-		return
-	}
-
-	var refreshExpiration *jwt.NumericDate = jwt.NewNumericDate(time.Now().Add(7 * 24 * time.Hour))
-
-	exp := time.Now().Add(15 * time.Minute)
-	claims := &Claims{Username: credentials.Username, RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: jwt.NewNumericDate(exp)}}
-	t, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(authConfig.JwtKey)
-	refresh, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, &Claims{Username: credentials.Username, RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: refreshExpiration}}).SignedString(authConfig.JwtKey)
+	t, refresh, refreshExpiration := generateTokens(credentials.Username)
 
 	// store token in DB
 	err = repo.AddRefreshToken(r.Context(), internal.AddRefreshTokenDTO{
@@ -154,22 +156,70 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Refresh
+//
+// @Summary Token refresh
+// @Description Token generation using refresh token
+// @Tags Authentication
+// @Accept
+// @Produce json
+// @Success 200 {object} LoginResponse
+// @Failure 401 {object} ErrorResponse
+// @Router /auth/refresh [post]
 func Refresh(w http.ResponseWriter, r *http.Request) {
+
+	repo := internal.Repository()
+	var userid int64
+	success := false
+
+	// audit the access at the end of the function
+	defer func() {
+		auditAccess(r.Context(), repo, userid, r.RemoteAddr, r.Header["User-Agent"][0], success, 1)
+	}()
 
 	token := r.Header.Get("Authorization")
 	if len(token) < 8 {
-		http.Error(w, "missing token", 401)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "token_format",
+			Message: "Invalid token format",
+		})
 		return
 	}
-	_, err := jwt.ParseWithClaims(token[7:], &Claims{}, func(t *jwt.Token) (interface{}, error) { return authConfig.JwtKey, nil })
+	jwttoken, err := jwt.ParseWithClaims(token[7:], &Claims{}, func(t *jwt.Token) (interface{}, error) { return authConfig.JwtKey, nil })
 	if err != nil {
-		http.Error(w, "invalid token", 401)
+		tokenError(err, w)
 		return
 	}
 
-	// TODO check refresh token
+	// Check refresh token
 
-	Login(w, r)
+	if !jwttoken.Valid {
+		tokenError(err, w)
+	} else {
+		username := jwttoken.Claims.(jwt.MapClaims)["username"].(string)
+		t, refresh, refreshExpiration := generateTokens(username)
+
+		userid, _ := repo.UserMap(r.Context(), internal.UserMapDTO{
+			Username: username,
+		})
+
+		// store token in DB
+		err = repo.AddRefreshToken(r.Context(), internal.AddRefreshTokenDTO{
+			UserID:    userid,
+			Token:     refresh,
+			ExpiresAt: refreshExpiration.Time,
+		})
+
+		success = true
+
+		json.NewEncoder(w).Encode(LoginResponse{
+			Token:   t,
+			Refresh: refresh,
+		})
+	}
 }
 
 // Authentication handler
@@ -178,68 +228,106 @@ func Auth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := r.Header.Get("Authorization")
 		if len(token) < 8 {
-			http.Error(w, "missing token", 401)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+
+			json.NewEncoder(w).Encode(ErrorResponse{
+				Error:   "token_format",
+				Message: "Invalid token format",
+			})
 			return
 		}
 		jwttoken, err := jwt.ParseWithClaims(token[7:], &Claims{}, func(t *jwt.Token) (interface{}, error) { return authConfig.JwtKey, nil })
 
 		if !jwttoken.Valid {
-			if err != nil {
-
-				if errors.Is(err, jwt.ErrTokenExpired) {
-					w.Header().Set("Content-Type", "application/json")
-					w.WriteHeader(http.StatusUnauthorized)
-
-					json.NewEncoder(w).Encode(ErrorResponse{
-						Error:   "token_expired",
-						Message: "JWT token has expired",
-					})
-				}
-
-				if errors.Is(err, jwt.ErrTokenNotValidYet) {
-					w.Header().Set("Content-Type", "application/json")
-					w.WriteHeader(http.StatusUnauthorized)
-
-					json.NewEncoder(w).Encode(ErrorResponse{
-						Error:   "token_invalid",
-						Message: "JWT token not already valid",
-					})
-				}
-
-				if errors.Is(err, jwt.ErrTokenMalformed) {
-					w.Header().Set("Content-Type", "application/json")
-					w.WriteHeader(http.StatusUnauthorized)
-
-					json.NewEncoder(w).Encode(ErrorResponse{
-						Error:   "token_malformed",
-						Message: "JWT token has wrong format",
-					})
-				}
-
-				if errors.Is(err, jwt.ErrTokenSignatureInvalid) {
-					w.Header().Set("Content-Type", "application/json")
-					w.WriteHeader(http.StatusUnauthorized)
-
-					json.NewEncoder(w).Encode(ErrorResponse{
-						Error:   "token_signature",
-						Message: "JWT token has wrong signature",
-					})
-				}
-
-				return
-			}
+			tokenError(err, w)
+		} else {
+			next(w, r)
 		}
-
-		next(w, r)
 	}
 }
 
-func auditAccess(context context.Context, repo *internal.AuthRepository, userid int64, remoteAddr string, userAgent string, success bool) error {
-	return repo.AddUserAudit(context, internal.AddUserAuditDTO{
-		UserID:    userid,
-		LoginDate: time.Now().UTC(),
-		IPAddress: &remoteAddr,
-		UserAgent: &userAgent,
-		Success:   success,
+func generateTokens(username string) (string, string, *jwt.NumericDate) {
+	var refreshExpiration *jwt.NumericDate = jwt.NewNumericDate(time.Now().Add(time.Duration(authConfig.refreshExpirationMin) * time.Minute))
+
+	exp := time.Now().Add(time.Duration(authConfig.tokenExpirationMin) * time.Minute)
+	claims := &Claims{Username: username, RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: jwt.NewNumericDate(exp)}}
+	t, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(authConfig.JwtKey)
+	refresh, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, &Claims{Username: username, RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: refreshExpiration}}).SignedString(authConfig.JwtKey)
+
+	return t, refresh, refreshExpiration
+}
+
+func tokenError(err error, w http.ResponseWriter) {
+	if err == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "unspecified error",
+			Message: "Unspecified error: nil",
+		})
+	}
+
+	if errors.Is(err, jwt.ErrTokenExpired) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "token_expired",
+			Message: "JWT token has expired",
+		})
+	}
+
+	if errors.Is(err, jwt.ErrTokenNotValidYet) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "token_invalid",
+			Message: "JWT token not already valid",
+		})
+	}
+
+	if errors.Is(err, jwt.ErrTokenMalformed) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "token_malformed",
+			Message: "JWT token has wrong format",
+		})
+	}
+
+	if errors.Is(err, jwt.ErrTokenSignatureInvalid) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "token_signature",
+			Message: "JWT token has wrong signature",
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusUnauthorized)
+
+	json.NewEncoder(w).Encode(ErrorResponse{
+		Error:   "unspecified error",
+		Message: "Unspecified error: " + err.Error(),
 	})
+
+}
+
+func auditAccess(context context.Context, repo *internal.AuthRepository, userid int64, remoteAddr string, userAgent string, success bool, reason int) {
+	if userid > 0 {
+		repo.AddUserAudit(context, internal.AddUserAuditDTO{
+			UserID:    userid,
+			LoginDate: time.Now().UTC(),
+			IPAddress: &remoteAddr,
+			UserAgent: &userAgent,
+			Success:   success,
+			Reason:    reason,
+		})
+	}
 }
