@@ -72,8 +72,8 @@ type ErrorResponse struct {
 }
 
 func RegisterAuthRoutes(mux *http.ServeMux, basePath string) {
-	mux.HandleFunc(basePath+"/login", Login)
-	mux.HandleFunc(basePath+"/refresh", Refresh)
+	mux.HandleFunc("POST "+basePath+"/login", Login)
+	mux.HandleFunc("GET "+basePath+"/refresh", Refresh)
 }
 
 // Login
@@ -165,7 +165,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Success 200 {object} LoginResponse
 // @Failure 401 {object} ErrorResponse
-// @Router /auth/refresh [post]
+// @Router /auth/refresh [get]
 func Refresh(w http.ResponseWriter, r *http.Request) {
 
 	repo := internal.Repository()
@@ -188,6 +188,7 @@ func Refresh(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
 	jwttoken, err := jwt.ParseWithClaims(token[7:], &Claims{}, func(t *jwt.Token) (interface{}, error) { return authConfig.JwtKey, nil })
 	if err != nil {
 		tokenError(err, w)
@@ -267,9 +268,7 @@ func tokenError(err error, w http.ResponseWriter) {
 			Error:   "unspecified error",
 			Message: "Unspecified error: nil",
 		})
-	}
-
-	if errors.Is(err, jwt.ErrTokenExpired) {
+	} else if errors.Is(err, jwt.ErrTokenExpired) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
 
@@ -277,9 +276,7 @@ func tokenError(err error, w http.ResponseWriter) {
 			Error:   "token_expired",
 			Message: "JWT token has expired",
 		})
-	}
-
-	if errors.Is(err, jwt.ErrTokenNotValidYet) {
+	} else if errors.Is(err, jwt.ErrTokenNotValidYet) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
 
@@ -287,9 +284,7 @@ func tokenError(err error, w http.ResponseWriter) {
 			Error:   "token_invalid",
 			Message: "JWT token not already valid",
 		})
-	}
-
-	if errors.Is(err, jwt.ErrTokenMalformed) {
+	} else if errors.Is(err, jwt.ErrTokenMalformed) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
 
@@ -297,9 +292,7 @@ func tokenError(err error, w http.ResponseWriter) {
 			Error:   "token_malformed",
 			Message: "JWT token has wrong format",
 		})
-	}
-
-	if errors.Is(err, jwt.ErrTokenSignatureInvalid) {
+	} else if errors.Is(err, jwt.ErrTokenSignatureInvalid) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
 
@@ -307,16 +300,15 @@ func tokenError(err error, w http.ResponseWriter) {
 			Error:   "token_signature",
 			Message: "JWT token has wrong signature",
 		})
+	} else {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Error:   "unspecified error",
+			Message: "Unspecified error: " + err.Error(),
+		})
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusUnauthorized)
-
-	json.NewEncoder(w).Encode(ErrorResponse{
-		Error:   "unspecified error",
-		Message: "Unspecified error: " + err.Error(),
-	})
-
 }
 
 func auditAccess(context context.Context, repo *internal.AuthRepository, userid int64, remoteAddr string, userAgent string, success bool, reason int) {
