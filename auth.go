@@ -189,12 +189,14 @@ func Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jwttoken, err := jwt.ParseWithClaims(token, &Claims{}, func(t *jwt.Token) (interface{}, error) { return authConfig.JwtKey, nil })
+	claims := &Claims{}
+
+	jwttoken, err := jwt.ParseWithClaims(token, claims, func(t *jwt.Token) (interface{}, error) { return authConfig.JwtKey, nil })
 
 	if !jwttoken.Valid {
 		tokenError(err, w)
 	} else {
-		username := jwttoken.Claims.(jwt.MapClaims)["username"].(string)
+		username := claims.Username
 		t, refresh, refreshExpiration := generateTokens(username)
 
 		userid, _ := repo.UserMap(r.Context(), internal.UserMapDTO{
@@ -232,7 +234,10 @@ func Auth(next http.HandlerFunc) http.HandlerFunc {
 			})
 			return
 		}
-		jwttoken, err := jwt.ParseWithClaims(token, &Claims{}, func(t *jwt.Token) (interface{}, error) { return authConfig.JwtKey, nil })
+
+		claims := &Claims{}
+
+		jwttoken, err := jwt.ParseWithClaims(token, claims, func(t *jwt.Token) (interface{}, error) { return authConfig.JwtKey, nil })
 
 		if !jwttoken.Valid {
 			tokenError(err, w)
