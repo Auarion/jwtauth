@@ -179,7 +179,7 @@ func Refresh(w http.ResponseWriter, r *http.Request) {
 
 	claims := &Claims{}
 
-	jwttoken, err := jwt.ParseWithClaims(token, claims, func(t *jwt.Token) (interface{}, error) { return authConfig.JwtKey, nil })
+	jwttoken, err := jwt.ParseWithClaims(token[7:], claims, func(t *jwt.Token) (interface{}, error) { return authConfig.JwtKey, nil })
 
 	if !jwttoken.Valid {
 		tokenError(err, w)
@@ -219,7 +219,7 @@ func Auth(apiConfig APIConfig) http.HandlerFunc {
 
 		claims := &Claims{}
 
-		jwttoken, err := jwt.ParseWithClaims(token, claims, func(t *jwt.Token) (interface{}, error) { return authConfig.JwtKey, nil })
+		jwttoken, err := jwt.ParseWithClaims(token[7:], claims, func(t *jwt.Token) (interface{}, error) { return authConfig.JwtKey, nil })
 
 		if !jwttoken.Valid {
 			tokenError(err, w)
