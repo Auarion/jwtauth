@@ -10,22 +10,30 @@ import (
 )
 
 type Config struct {
-	Host     string
-	Port     int
-	User     string
-	Password string
-	Database string
-	SSLMode  string
+	Host            string
+	Port            int
+	User            string
+	Password        string
+	Database        string
+	AuthSchema      string
+	SSLMode         string
+	MaxOpenConns    int
+	MaxIdleConns    int
+	MaxConnLifetime time.Duration
 }
 
 var pdb *sql.DB
 var dbcfg Config = Config{
 	"localhost",
 	5432,
-	"scadenziario",
-	"scadenziario",
-	"ComelitPL",
+	"public",
+	"public",
+	"postgres",
+	"public",
 	"",
+	25,
+	10,
+	30 * time.Minute,
 }
 
 func SetDBConfig(cfg Config) {
@@ -114,7 +122,7 @@ func (r *AuthRepository) UserMap(
 	var userID int64
 
 	query := `
-		CALL public.auth_user_map(
+		CALL ` + dbcfg.AuthSchema + `.auth_user_map(
             $1,
             $2
         )    
@@ -145,7 +153,7 @@ func (r *AuthRepository) AuthenticateUser(
 ) (string, int64, error) {
 
 	query := `
-        call public.auth_user_authenticate(
+        CALL ` + dbcfg.AuthSchema + `.auth_user_authenticate(
             $1,
             $2,
 			$3,
@@ -184,7 +192,7 @@ func (r *AuthRepository) AddRefreshToken(
 ) error {
 
 	query := `
-        CALL public.auth_add_refresh_token(
+        CALL ` + dbcfg.AuthSchema + `.auth_add_refresh_token(
             $1,
             $2,
             $3
@@ -218,7 +226,7 @@ func (r *AuthRepository) AddUserAudit(
 
 	if dto.UserID > 0 {
 		query := `
-			CALL public.auth_add_user_audit(
+			CALL ` + dbcfg.AuthSchema + `.auth_add_user_audit(
 				$1,
 				$2,
 				$3,
@@ -255,7 +263,7 @@ func (r *AuthRepository) RevokeRefreshToken(
 ) error {
 
 	query := `
-        CALL public.auth_revoke_refresh_token(
+        CALL ` + dbcfg.AuthSchema + `.auth_revoke_refresh_token(
             $1
         )
     `
@@ -280,7 +288,7 @@ func (r *AuthRepository) ChangePassword(
 ) error {
 
 	query := `
-        CALL public.auth_user_changepassword(
+        CALL ` + dbcfg.AuthSchema + `.auth_user_changepassword(
             $1,
             $2
         )
@@ -294,4 +302,33 @@ func (r *AuthRepository) ChangePassword(
 	)
 
 	return err
+}
+
+func (r *AuthRepository) GetUserRoles(
+	ctx context.Context,
+	userid int64,
+) ([]string, error) {
+
+	rows, err := r.DB.Query(
+		"SELECT * FROM "+dbcfg.AuthSchema+".auth_getuserroles($1)",
+		userid,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ret []string
+
+	for rows.Next() {
+		var role string
+
+		if err := rows.Scan(&role); err != nil {
+			return nil, err
+		}
+
+		ret = append(ret, role)
+	}
+
+	return ret, nil
 }

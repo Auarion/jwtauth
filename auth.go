@@ -27,12 +27,16 @@ type AuthConfig struct {
 }
 
 type DBConfig struct {
-	Host     string
-	Port     int
-	User     string
-	Password string
-	Database string
-	SSLMode  string
+	Host            string
+	Port            int
+	User            string
+	Password        string
+	Database        string
+	AuthSchema      string
+	SSLMode         string
+	MaxOpenConns    int
+	MaxIdleConns    int
+	MaxConnLifetime time.Duration
 }
 
 var authConfig = AuthConfig{
@@ -45,7 +49,11 @@ var authConfig = AuthConfig{
 		"auth",
 		"auth",
 		"Auth",
+		"auth",
 		"",
+		25,
+		10,
+		30 * time.Minute,
 	},
 }
 
