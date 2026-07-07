@@ -224,9 +224,9 @@ func Refresh(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Authentication handler
+// Authentication handler generation
 
-func Auth(apiId string, next http.HandlerFunc) http.HandlerFunc {
+func Auth(apiConfig APIConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := r.Header.Get("Authorization")
 		if len(token) < 8 {
@@ -249,18 +249,6 @@ func Auth(apiId string, next http.HandlerFunc) http.HandlerFunc {
 		} else {
 
 			if authConfig.Authorize {
-
-				_, ok := apisMap[apiId]
-				if !ok {
-					w.Header().Set("Content-Type", "application/json")
-					w.WriteHeader(http.StatusUnauthorized)
-
-					json.NewEncoder(w).Encode(ErrorResponse{
-						Error:   "auth_api",
-						Message: "Invalid API id",
-					})
-					return
-				}
 
 				repo := internal.Repository()
 				username := claims.Username
@@ -290,7 +278,7 @@ func Auth(apiId string, next http.HandlerFunc) http.HandlerFunc {
 					return
 				}
 
-				commonRoles := intersection(userroles, apisMap[apiId].AuthorizationRoles)
+				commonRoles := intersection(userroles, apiConfig.AuthorizationRoles)
 
 				if len(commonRoles) == 0 {
 					w.Header().Set("Content-Type", "application/json")
@@ -304,7 +292,7 @@ func Auth(apiId string, next http.HandlerFunc) http.HandlerFunc {
 				}
 			}
 
-			next(w, r)
+			apiConfig.Handler(w, r)
 		}
 	}
 }
