@@ -14,7 +14,8 @@ import (
 )
 
 type APIConfig struct {
-	Id                 string
+	Path               string
+	Method             string
 	Handler            func(w http.ResponseWriter, r *http.Request)
 	AuthorizationRoles []string
 }
@@ -55,7 +56,7 @@ func SetAuthConfig(cfg AuthConfig) {
 	internal.SetDBConfig(internal.Config(cfg.DbConfig))
 
 	for _, apiCfg := range authConfig.APIConfig {
-		apisMap[apiCfg.Id] = apiCfg
+		apisMap[apiCfg.Path] = apiCfg
 	}
 }
 
