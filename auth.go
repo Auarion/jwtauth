@@ -261,7 +261,7 @@ func Refresh(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func RefreshImpl(ctx context.Context, token string) interface{} {
+func RefreshImpl(ctx context.Context, token string, remoteAddress string, userAgent string) interface{} {
 
 	repo := internal.Repository()
 	var userid int64
@@ -269,7 +269,7 @@ func RefreshImpl(ctx context.Context, token string) interface{} {
 
 	// audit the access at the end of the function
 	defer func() {
-		auditAccess(r.Context(), repo, userid, r.RemoteAddr, r.Header["User-Agent"][0], success, 1)
+		auditAccess(ctx, repo, userid, remoteAddress, userAgent, success, 1)
 	}()
 
 	if len(token) < 8 {
