@@ -305,7 +305,6 @@ func (r *AuthRepository) ChangePassword(
 }
 
 func (r *AuthRepository) GetUserRoles(
-	ctx context.Context,
 	userid int64,
 ) ([]string, error) {
 

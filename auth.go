@@ -13,6 +13,12 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+type APIConfig struct {
+	Id                 string
+	Handler            func(w http.ResponseWriter, r *http.Request)
+	AuthorizationRoles []string
+}
+
 // Configuration
 type Claims struct {
 	Username string `json:"username"`
@@ -24,6 +30,8 @@ type AuthConfig struct {
 	TokenExpirationMin   int32
 	RefreshExpirationMin int32
 	DbConfig             DBConfig
+	APIConfig            []APIConfig
+	Authorize            bool
 }
 
 type DBConfig struct {
@@ -39,27 +47,16 @@ type DBConfig struct {
 	MaxConnLifetime time.Duration
 }
 
-var authConfig = AuthConfig{
-	[]byte("super-secret-signing-key"),
-	15,
-	60 * 24,
-	DBConfig{
-		"localhost",
-		5432,
-		"auth",
-		"auth",
-		"Auth",
-		"auth",
-		"",
-		25,
-		10,
-		30 * time.Minute,
-	},
-}
+var authConfig AuthConfig
+var apisMap map[string]APIConfig = make(map[string]APIConfig)
 
 func SetAuthConfig(cfg AuthConfig) {
 	authConfig = cfg
 	internal.SetDBConfig(internal.Config(cfg.DbConfig))
+
+	for _, apiCfg := range authConfig.APIConfig {
+		apisMap[apiCfg.Id] = apiCfg
+	}
 }
 
 // APIs
@@ -229,7 +226,7 @@ func Refresh(w http.ResponseWriter, r *http.Request) {
 
 // Authentication handler
 
-func Auth(next http.HandlerFunc) http.HandlerFunc {
+func Auth(apiId string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := r.Header.Get("Authorization")
 		if len(token) < 8 {
@@ -250,9 +247,84 @@ func Auth(next http.HandlerFunc) http.HandlerFunc {
 		if !jwttoken.Valid {
 			tokenError(err, w)
 		} else {
+
+			if authConfig.Authorize {
+
+				_, ok := apisMap[apiId]
+				if !ok {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusUnauthorized)
+
+					json.NewEncoder(w).Encode(ErrorResponse{
+						Error:   "auth_api",
+						Message: "Invalid API id",
+					})
+					return
+				}
+
+				repo := internal.Repository()
+				username := claims.Username
+				userid, err := repo.UserMap(r.Context(), internal.UserMapDTO{
+					Username: username,
+				})
+				if err != nil {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusUnauthorized)
+
+					json.NewEncoder(w).Encode(ErrorResponse{
+						Error:   "internal_error",
+						Message: "Username",
+					})
+					return
+				}
+
+				userroles, err := repo.GetUserRoles(userid)
+				if err != nil {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusUnauthorized)
+
+					json.NewEncoder(w).Encode(ErrorResponse{
+						Error:   "internal_error",
+						Message: "Get roles",
+					})
+					return
+				}
+
+				commonRoles := intersection(userroles, apisMap[apiId].AuthorizationRoles)
+
+				if len(commonRoles) == 0 {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusUnauthorized)
+
+					json.NewEncoder(w).Encode(ErrorResponse{
+						Error:   "auth_authorization",
+						Message: "User not authorized",
+					})
+					return
+				}
+			}
+
 			next(w, r)
 		}
 	}
+}
+
+func intersection(a, b []string) []string {
+	set := make(map[string]struct{})
+
+	for _, s := range a {
+		set[s] = struct{}{}
+	}
+
+	result := make([]string, 0)
+
+	for _, s := range b {
+		if _, found := set[s]; found {
+			result = append(result, s)
+		}
+	}
+
+	return result
 }
 
 func generateTokens(username string) (string, string, *jwt.NumericDate) {
