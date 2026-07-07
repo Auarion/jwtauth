@@ -150,6 +150,60 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func LoginImpl(ctx context.Context, credentials AuthenticateUser, remoteAddress string, userAgent string) interface{} {
+
+	repo := internal.Repository()
+	success := false
+	var userid int64
+	var err error
+	var hashedPassword string
+
+	// audit the access at the end of the function
+	defer func() {
+		auditAccess(ctx, repo, userid, remoteAddress, userAgent, success, 0)
+	}()
+
+	hashedPassword, userid, err = repo.AuthenticateUser(ctx, internal.AuthenticateUserDTO{
+		Username: credentials.Username,
+		Password: credentials.Password,
+	})
+
+	if err != nil || hashedPassword == "" {
+		return ErrorResponse{
+			Error:   "auth_error",
+			Message: "Authentication error",
+		}
+	}
+
+	err = bcrypt.CompareHashAndPassword(
+		[]byte(hashedPassword),
+		[]byte(credentials.Password),
+	)
+
+	if err != nil {
+		return ErrorResponse{
+			Error:   "auth_error",
+			Message: "Authentication error",
+		}
+	}
+
+	t, refresh, refreshExpiration := generateTokens(credentials.Username)
+
+	// store token in DB
+	err = repo.AddRefreshToken(ctx, internal.AddRefreshTokenDTO{
+		UserID:    userid,
+		Token:     refresh,
+		ExpiresAt: refreshExpiration.Time,
+	})
+
+	success = true
+
+	return LoginResponse{
+		Token:   t,
+		Refresh: refresh,
+	}
+}
+
 // Refresh
 //
 // @Summary Token refresh
@@ -207,8 +261,55 @@ func Refresh(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Authentication handler generation
+func RefreshImpl(ctx context.Context, token string) interface{} {
 
+	repo := internal.Repository()
+	var userid int64
+	success := false
+
+	// audit the access at the end of the function
+	defer func() {
+		auditAccess(r.Context(), repo, userid, r.RemoteAddr, r.Header["User-Agent"][0], success, 1)
+	}()
+
+	if len(token) < 8 {
+		return ErrorResponse{
+			Error:   "token_format",
+			Message: "Invalid token format",
+		}
+	}
+
+	claims := &Claims{}
+
+	jwttoken, err := jwt.ParseWithClaims(token[7:], claims, func(t *jwt.Token) (interface{}, error) { return authConfig.JwtKey, nil })
+
+	if !jwttoken.Valid {
+		return tokenErrorMsg(err)
+	} else {
+		username := claims.Username
+		t, refresh, refreshExpiration := generateTokens(username)
+
+		userid, _ := repo.UserMap(ctx, internal.UserMapDTO{
+			Username: username,
+		})
+
+		// store token in DB
+		err = repo.AddRefreshToken(ctx, internal.AddRefreshTokenDTO{
+			UserID:    userid,
+			Token:     refresh,
+			ExpiresAt: refreshExpiration.Time,
+		})
+
+		success = true
+
+		return LoginResponse{
+			Token:   t,
+			Refresh: refresh,
+		}
+	}
+}
+
+// Authentication handler generation
 func Auth(apiConfig APIConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := r.Header.Get("Authorization")
@@ -312,6 +413,35 @@ func tokenError(err error, w http.ResponseWriter) {
 	}
 
 	emitError(w, http.StatusUnauthorized, errmsg, msg)
+}
+
+func tokenErrorMsg(err error) ErrorResponse {
+	var errmsg, msg string
+
+	if err == nil {
+		errmsg = "unspecified error"
+		msg = "Unspecified error: nil"
+	} else if errors.Is(err, jwt.ErrTokenExpired) {
+		errmsg = "token_expired"
+		msg = "JWT token has expired"
+	} else if errors.Is(err, jwt.ErrTokenNotValidYet) {
+		errmsg = "token_invalid"
+		msg = "JWT token not already valid"
+	} else if errors.Is(err, jwt.ErrTokenMalformed) {
+		errmsg = "token_malformed"
+		msg = "JWT token has wrong format"
+	} else if errors.Is(err, jwt.ErrTokenSignatureInvalid) {
+		errmsg = "token_signature"
+		msg = "JWT token has wrong signature"
+	} else {
+		errmsg = "unspecified error"
+		msg = "Unspecified error: " + err.Error()
+	}
+
+	return ErrorResponse{
+		Error:   errmsg,
+		Message: msg,
+	}
 }
 
 func emitError(w http.ResponseWriter, status int, errormsg string, message string) {
