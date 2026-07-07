@@ -119,13 +119,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if err != nil || hashedPassword == "" {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-
-		json.NewEncoder(w).Encode(ErrorResponse{
-			Error:   "auth_error",
-			Message: "Authentication error",
-		})
+		emitError(w, http.StatusUnauthorized, "auth_error", "Authentication error")
 		return
 	}
 
@@ -135,13 +129,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-
-		json.NewEncoder(w).Encode(ErrorResponse{
-			Error:   "auth_error",
-			Message: "Authentication error",
-		})
+		emitError(w, http.StatusUnauthorized, "auth_error", "Authentication error")
 		return
 	}
 
@@ -185,13 +173,7 @@ func Refresh(w http.ResponseWriter, r *http.Request) {
 
 	token := r.Header.Get("Authorization")
 	if len(token) < 8 {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-
-		json.NewEncoder(w).Encode(ErrorResponse{
-			Error:   "token_format",
-			Message: "Invalid token format",
-		})
+		emitError(w, http.StatusUnauthorized, "token_format", "Invalid token format")
 		return
 	}
 
@@ -231,13 +213,7 @@ func Auth(apiConfig APIConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := r.Header.Get("Authorization")
 		if len(token) < 8 {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusUnauthorized)
-
-			json.NewEncoder(w).Encode(ErrorResponse{
-				Error:   "token_format",
-				Message: "Invalid token format",
-			})
+			emitError(w, http.StatusUnauthorized, "token_format", "Invalid token format")
 			return
 		}
 
@@ -257,38 +233,20 @@ func Auth(apiConfig APIConfig) http.HandlerFunc {
 					Username: username,
 				})
 				if err != nil {
-					w.Header().Set("Content-Type", "application/json")
-					w.WriteHeader(http.StatusUnauthorized)
-
-					json.NewEncoder(w).Encode(ErrorResponse{
-						Error:   "internal_error",
-						Message: "Username",
-					})
+					emitError(w, http.StatusUnauthorized, "internal_error", "Username")
 					return
 				}
 
 				userroles, err := repo.GetUserRoles(userid)
 				if err != nil {
-					w.Header().Set("Content-Type", "application/json")
-					w.WriteHeader(http.StatusUnauthorized)
-
-					json.NewEncoder(w).Encode(ErrorResponse{
-						Error:   "internal_error",
-						Message: "Get roles",
-					})
+					emitError(w, http.StatusUnauthorized, "internal_error", "Get roles")
 					return
 				}
 
 				commonRoles := intersection(userroles, apiConfig.AuthorizationRoles)
 
 				if len(commonRoles) == 0 {
-					w.Header().Set("Content-Type", "application/json")
-					w.WriteHeader(http.StatusUnauthorized)
-
-					json.NewEncoder(w).Encode(ErrorResponse{
-						Error:   "auth_authorization",
-						Message: "User not authorized",
-					})
+					emitError(w, http.StatusUnauthorized, "auth_authorization", "User not authorized")
 					return
 				}
 			}
@@ -331,55 +289,39 @@ func generateTokens(username string) (string, string, *jwt.NumericDate) {
 }
 
 func tokenError(err error, w http.ResponseWriter) {
+	var errmsg, msg string
+
 	if err == nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-
-		json.NewEncoder(w).Encode(ErrorResponse{
-			Error:   "unspecified error",
-			Message: "Unspecified error: nil",
-		})
+		errmsg = "unspecified error"
+		msg = "Unspecified error: nil"
 	} else if errors.Is(err, jwt.ErrTokenExpired) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-
-		json.NewEncoder(w).Encode(ErrorResponse{
-			Error:   "token_expired",
-			Message: "JWT token has expired",
-		})
+		errmsg = "token_expired"
+		msg = "JWT token has expired"
 	} else if errors.Is(err, jwt.ErrTokenNotValidYet) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-
-		json.NewEncoder(w).Encode(ErrorResponse{
-			Error:   "token_invalid",
-			Message: "JWT token not already valid",
-		})
+		errmsg = "token_invalid"
+		msg = "JWT token not already valid"
 	} else if errors.Is(err, jwt.ErrTokenMalformed) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-
-		json.NewEncoder(w).Encode(ErrorResponse{
-			Error:   "token_malformed",
-			Message: "JWT token has wrong format",
-		})
+		errmsg = "token_malformed"
+		msg = "JWT token has wrong format"
 	} else if errors.Is(err, jwt.ErrTokenSignatureInvalid) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-
-		json.NewEncoder(w).Encode(ErrorResponse{
-			Error:   "token_signature",
-			Message: "JWT token has wrong signature",
-		})
+		errmsg = "token_signature"
+		msg = "JWT token has wrong signature"
 	} else {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-
-		json.NewEncoder(w).Encode(ErrorResponse{
-			Error:   "unspecified error",
-			Message: "Unspecified error: " + err.Error(),
-		})
+		errmsg = "unspecified error"
+		msg = "Unspecified error: " + err.Error()
 	}
+
+	emitError(w, http.StatusUnauthorized, errmsg, msg)
+}
+
+func emitError(w http.ResponseWriter, status int, errormsg string, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+
+	json.NewEncoder(w).Encode(ErrorResponse{
+		Error:   errormsg,
+		Message: message,
+	})
 }
 
 func auditAccess(context context.Context, repo *internal.AuthRepository, userid int64, remoteAddr string, userAgent string, success bool, reason int) {
