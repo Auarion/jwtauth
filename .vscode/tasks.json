@@ -1,0 +1,13 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "dump-db",
+            "type": "shell",
+            "command": "pg_dump -U postgres -d ComelitPL -n public > public_dump.sql",
+            "options": {
+                "cwd": "${workspaceFolder}/db/postgresql",
+            }
+        },
+    ]
+}
