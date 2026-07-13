@@ -4,8 +4,18 @@
         {
             "label": "dump-db",
             "type": "shell",
-            "command": "pg_dump -U postgres -d ComelitPL -n public > public_dump.sql",
-            "options": {
+            "command": "pg_dump",
+            "args": [
+                "-U",
+                "postgres",
+                "-d",
+                "${input:dbName}",
+                "-n",
+                "auth",
+                ">",
+                "auth_dump.sql"
+            ],
+           "options": {
                 "cwd": "${workspaceFolder}/db/postgresql",
             }
         },
