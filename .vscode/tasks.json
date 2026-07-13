@@ -9,5 +9,29 @@
                 "cwd": "${workspaceFolder}/db/postgresql",
             }
         },
+        {
+            "label": "create-db",
+            "type": "shell",
+            "command": "psql",
+            "args": [
+                "-U",
+                "postgres",
+                "-d",
+                "${input:dbName}",
+                "-f",
+                "create-auth-schema.sql"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/db/postgresql",
+            },
+        },
+    ],
+    "inputs": [
+        {
+            "id": "dbName",
+            "type": "promptString",
+            "description": "Database name",
+            "default": "postgres"
+        }
     ]
 }
