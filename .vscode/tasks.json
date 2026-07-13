@@ -12,7 +12,9 @@
                 "${input:dbName}",
                 "-n",
                 "auth",
-                ">",
+                "-E",
+                "UTF8",
+                "-f",
                 "auth_dump.sql"
             ],
            "options": {
