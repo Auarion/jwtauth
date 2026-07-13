@@ -26,10 +26,10 @@ var pdb *sql.DB
 var dbcfg Config = Config{
 	"localhost",
 	5432,
-	"public",
-	"public",
 	"postgres",
-	"public",
+	"postgres",
+	"postgres",
+	"auth",
 	"",
 	25,
 	10,
