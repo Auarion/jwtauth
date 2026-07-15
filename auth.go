@@ -10,6 +10,7 @@ import (
 
 	"github.com/Auarion/jwtauth/internal"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/rs/cors"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -50,14 +51,17 @@ type DBConfig struct {
 
 var authConfig AuthConfig
 var apisMap map[string]APIConfig = make(map[string]APIConfig)
+var corsManager *cors.Cors
 
-func SetAuthConfig(cfg AuthConfig) {
+func SetAuthConfig(cfg AuthConfig, cOpts cors.Options) {
 	authConfig = cfg
 	internal.SetDBConfig(internal.Config(cfg.DbConfig))
 
 	for _, apiCfg := range authConfig.APIConfig {
 		apisMap[apiCfg.Path] = apiCfg
 	}
+
+	corsManager = cors.New(cOpts)
 }
 
 // APIs
@@ -353,6 +357,41 @@ func Auth(apiConfig APIConfig) http.HandlerFunc {
 			}
 
 			apiConfig.Handler(w, r)
+		}
+	}
+}
+
+/*
+func Cors(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// TODO generare automaticamente gli headers da corsConfig
+		//
+		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		// Gestione preflight request
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+*/
+
+func GetCORSHandler(mux *http.ServeMux) http.Handler {
+	return corsManager.Handler(mux)
+}
+
+func RegisterAPIsRoutes(mux *http.ServeMux, apisList []APIConfig, enableCors bool) {
+
+	for _, cfg := range apisList {
+		if len(cfg.AuthorizationRoles) > 0 {
+			mux.HandleFunc(cfg.Method+" "+cfg.Path, Auth(cfg))
+		} else {
+			mux.HandleFunc(cfg.Method+" "+cfg.Path, cfg.Handler)
 		}
 	}
 }
