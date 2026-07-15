@@ -389,9 +389,34 @@ func RegisterAPIsRoutes(mux *http.ServeMux, apisList []APIConfig, enableCors boo
 
 	for _, cfg := range apisList {
 		if len(cfg.AuthorizationRoles) > 0 {
-			mux.HandleFunc(cfg.Method+" "+cfg.Path, Auth(cfg))
+			if enableCors {
+				// TODO change to add CORS handler first
+				//
+				/*
+					c := cors.New(cors.Options{
+						AllowedOrigins: []string{"http://localhost:3000"},
+						AllowedMethods: []string{"GET", "POST", "PUT", "DELETE"},
+						AllowedHeaders: []string{"Authorization", "Content-Type"},
+						AllowCredentials: true,
+					})
+
+					handler := c.Handler(authHandler(mux))
+
+					http.ListenAndServe(":8080", handler)
+				*/
+
+				mux.HandleFunc(cfg.Method+" "+cfg.Path, Auth(cfg))
+			} else {
+				mux.HandleFunc(cfg.Method+" "+cfg.Path, Auth(cfg))
+			}
 		} else {
-			mux.HandleFunc(cfg.Method+" "+cfg.Path, cfg.Handler)
+			if enableCors {
+				// TODO same as before
+				//
+				mux.HandleFunc(cfg.Method+" "+cfg.Path, cfg.Handler)
+			} else {
+				mux.HandleFunc(cfg.Method+" "+cfg.Path, cfg.Handler)
+			}
 		}
 	}
 }
