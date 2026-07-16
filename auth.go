@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 
 	"net/http"
 	"time"
@@ -34,6 +35,7 @@ type AuthConfig struct {
 	DbConfig             DBConfig
 	APIConfig            []APIConfig
 	Authorize            bool
+	LogHandler           func(http.Handler) http.Handler
 }
 
 type DBConfig struct {
@@ -62,6 +64,10 @@ func SetAuthConfig(cfg AuthConfig, cOpts cors.Options) {
 	}
 
 	corsManager = cors.New(cOpts)
+
+	if authConfig.LogHandler == nil {
+		authConfig.LogHandler = loggingMiddleware
+	}
 }
 
 // APIs
@@ -380,47 +386,73 @@ func Cors(next http.Handler) http.Handler {
 	})
 }
 */
-
+/*
 func GetCORSHandler(mux *http.ServeMux) http.Handler {
 	return corsManager.Handler(mux)
 }
+*/
 
-func RegisterAPIsRoutes(mux *http.ServeMux, apisList []APIConfig, enableCors bool) {
+func loggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		log.Printf(
+			"%s - method=%s path=%s remote=%s user-agent=%q",
+			r.Method,
+			r.URL.Path,
+			r.RemoteAddr,
+			r.UserAgent(),
+			time.Now().UTC().Format("2006-01-02T15:04:05Z"),
+		)
+
+		next.ServeHTTP(w, r)
+
+		log.Printf(
+			"%s - completed path=%s duration=%s",
+			r.URL.Path,
+			time.Since(start),
+			time.Now().UTC().Format("2006-01-02T15:04:05Z"),
+		)
+	})
+}
+
+/*
+	c := cors.New(cors.Options{
+		AllowedOrigins: []string{"http://localhost:3000"},
+		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE"},
+		AllowedHeaders: []string{"Authorization", "Content-Type"},
+		AllowCredentials: true,
+	})
+
+	handler := c.Handler(authHandler(mux))
+
+	http.ListenAndServe(":8080", handler)
+*/
+
+func RegisterAPIsRoutes(mux *http.ServeMux, apisList []APIConfig, enableCors bool, enableLog bool) {
 
 	for _, cfg := range apisList {
+		var handler http.HandlerFunc
+
 		if len(cfg.AuthorizationRoles) > 0 {
 			if enableCors {
-				// TODO change to add CORS handler first
-				//
-				/*
-					c := cors.New(cors.Options{
-						AllowedOrigins: []string{"http://localhost:3000"},
-						AllowedMethods: []string{"GET", "POST", "PUT", "DELETE"},
-						AllowedHeaders: []string{"Authorization", "Content-Type"},
-						AllowCredentials: true,
-					})
-
-					handler := c.Handler(authHandler(mux))
-
-					http.ListenAndServe(":8080", handler)
-				*/
-
-				handler := corsManager.Handler(Auth(cfg)).ServeHTTP
-				mux.HandleFunc(cfg.Method+" "+cfg.Path, handler)
+				handler = corsManager.Handler(Auth(cfg)).ServeHTTP
 			} else {
-				mux.HandleFunc(cfg.Method+" "+cfg.Path, Auth(cfg))
+				handler = Auth(cfg)
 			}
 		} else {
 			if enableCors {
-				var h http.Handler = http.HandlerFunc(cfg.Handler)
-
-				handler := corsManager.Handler(h).ServeHTTP
-
-				mux.HandleFunc(cfg.Method+" "+cfg.Path, handler)
+				handler = corsManager.Handler(http.HandlerFunc(cfg.Handler)).ServeHTTP
 			} else {
-				mux.HandleFunc(cfg.Method+" "+cfg.Path, cfg.Handler)
+				handler = cfg.Handler
 			}
 		}
+
+		if enableLog {
+			handler = loggingMiddleware(handler).ServeHTTP
+		}
+
+		mux.HandleFunc(cfg.Method+" "+cfg.Path, handler)
 	}
 }
 
