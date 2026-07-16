@@ -386,11 +386,10 @@ func Cors(next http.Handler) http.Handler {
 	})
 }
 */
-/*
+
 func GetCORSHandler(mux *http.ServeMux) http.Handler {
 	return corsManager.Handler(mux)
 }
-*/
 
 func loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -439,6 +438,35 @@ func loggingMiddleware(next http.Handler) http.Handler {
 	handler := c.Handler(authHandler(mux))
 
 	http.ListenAndServe(":8080", handler)
+*/
+/*
+func customCORS(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+        origin := r.Header.Get("Origin")
+        if origin != "" {
+            w.Header().Set("Access-Control-Allow-Origin", origin)
+            w.Header().Set("Vary", "Origin")
+        }
+
+        w.Header().Set(
+            "Access-Control-Allow-Methods",
+            "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+        )
+
+        w.Header().Set(
+            "Access-Control-Allow-Headers",
+            "Authorization, Content-Type",
+        )
+
+        if r.Method == http.MethodOptions {
+            w.WriteHeader(http.StatusNoContent)
+            return
+        }
+
+        next.ServeHTTP(w, r)
+    })
+}
 */
 
 func RegisterAPIsRoutes(mux *http.ServeMux, apisList []APIConfig, enableCors bool, enableLog bool) {
