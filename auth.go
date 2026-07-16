@@ -404,6 +404,20 @@ func loggingMiddleware(next http.Handler) http.Handler {
 			r.UserAgent(),
 		)
 
+		keys := make([]string, 0, len(r.Header))
+
+		for k := range r.Header {
+			keys = append(keys, k)
+		}
+
+		for _, k := range keys {
+			var msg = "  " + k + "="
+			for _, v := range r.Header[k] {
+				msg = msg + v + " "
+			}
+			log.Println(msg)
+		}
+
 		next.ServeHTTP(w, r)
 
 		log.Printf(
