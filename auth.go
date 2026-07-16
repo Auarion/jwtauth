@@ -405,15 +405,18 @@ func RegisterAPIsRoutes(mux *http.ServeMux, apisList []APIConfig, enableCors boo
 					http.ListenAndServe(":8080", handler)
 				*/
 
-				mux.HandleFunc(cfg.Method+" "+cfg.Path, Auth(cfg))
+				handler := corsManager.Handler(Auth(cfg)).ServeHTTP
+				mux.HandleFunc(cfg.Method+" "+cfg.Path, handler)
 			} else {
 				mux.HandleFunc(cfg.Method+" "+cfg.Path, Auth(cfg))
 			}
 		} else {
 			if enableCors {
-				// TODO same as before
-				//
-				mux.HandleFunc(cfg.Method+" "+cfg.Path, cfg.Handler)
+				var h http.Handler = http.HandlerFunc(cfg.Handler)
+
+				handler := corsManager.Handler(h).ServeHTTP
+
+				mux.HandleFunc(cfg.Method+" "+cfg.Path, handler)
 			} else {
 				mux.HandleFunc(cfg.Method+" "+cfg.Path, cfg.Handler)
 			}
