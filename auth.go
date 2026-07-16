@@ -398,20 +398,20 @@ func loggingMiddleware(next http.Handler) http.Handler {
 
 		log.Printf(
 			"%s - method=%s path=%s remote=%s user-agent=%q",
+			time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 			r.Method,
 			r.URL.Path,
 			r.RemoteAddr,
 			r.UserAgent(),
-			time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 		)
 
 		next.ServeHTTP(w, r)
 
 		log.Printf(
+			time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 			"%s - completed path=%s duration=%s",
 			r.URL.Path,
 			time.Since(start),
-			time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 		)
 	})
 }
