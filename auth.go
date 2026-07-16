@@ -468,8 +468,8 @@ func customCORS(next http.Handler) http.Handler {
     })
 }
 */
-
-func RegisterAPIsRoutes(mux *http.ServeMux, apisList []APIConfig, enableCors bool, enableLog bool) {
+/*
+func RegisterAPIsRoutesOLD(mux *http.ServeMux, apisList []APIConfig, enableCors bool, enableLog bool) {
 
 	for _, cfg := range apisList {
 		var handler http.HandlerFunc
@@ -486,6 +486,25 @@ func RegisterAPIsRoutes(mux *http.ServeMux, apisList []APIConfig, enableCors boo
 			} else {
 				handler = cfg.Handler
 			}
+		}
+
+		if enableLog {
+			handler = loggingMiddleware(handler).ServeHTTP
+		}
+
+		mux.HandleFunc(cfg.Method+" "+cfg.Path, handler)
+	}
+}
+*/
+func RegisterAPIsRoutes(mux *http.ServeMux, apisList []APIConfig, enableLog bool) {
+
+	for _, cfg := range apisList {
+		var handler http.HandlerFunc
+
+		if len(cfg.AuthorizationRoles) > 0 {
+			handler = Auth(cfg)
+		} else {
+			handler = cfg.Handler
 		}
 
 		if enableLog {
