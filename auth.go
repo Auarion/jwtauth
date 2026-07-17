@@ -319,6 +319,13 @@ func RefreshImpl(ctx context.Context, token string, remoteAddress string, userAg
 	}
 }
 
+const UserID = "UserID"
+
+type UserIdentification struct {
+	Username string
+	UserId   int64
+}
+
 // Authentication handler generation
 func Auth(apiConfig APIConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -360,32 +367,19 @@ func Auth(apiConfig APIConfig) http.HandlerFunc {
 					emitError(w, http.StatusUnauthorized, "auth_authorization", "User not authorized")
 					return
 				}
-			}
 
-			apiConfig.Handler(w, r)
+				ctx := context.WithValue(r.Context(), UserID, UserIdentification{
+					Username: username,
+					UserId:   userid,
+				})
+
+				apiConfig.Handler(w, r.WithContext(ctx))
+			} else {
+				apiConfig.Handler(w, r)
+			}
 		}
 	}
 }
-
-/*
-func Cors(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// TODO generare automaticamente gli headers da corsConfig
-		//
-		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
-		// Gestione preflight request
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
-}
-*/
 
 func GetCORSHandler(mux *http.ServeMux) http.Handler {
 	return corsManager.Handler(mux)
@@ -427,75 +421,6 @@ func loggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-/*
-	c := cors.New(cors.Options{
-		AllowedOrigins: []string{"http://localhost:3000"},
-		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE"},
-		AllowedHeaders: []string{"Authorization", "Content-Type"},
-		AllowCredentials: true,
-	})
-
-	handler := c.Handler(authHandler(mux))
-
-	http.ListenAndServe(":8080", handler)
-*/
-/*
-func customCORS(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
-        origin := r.Header.Get("Origin")
-        if origin != "" {
-            w.Header().Set("Access-Control-Allow-Origin", origin)
-            w.Header().Set("Vary", "Origin")
-        }
-
-        w.Header().Set(
-            "Access-Control-Allow-Methods",
-            "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-        )
-
-        w.Header().Set(
-            "Access-Control-Allow-Headers",
-            "Authorization, Content-Type",
-        )
-
-        if r.Method == http.MethodOptions {
-            w.WriteHeader(http.StatusNoContent)
-            return
-        }
-
-        next.ServeHTTP(w, r)
-    })
-}
-*/
-/*
-func RegisterAPIsRoutesOLD(mux *http.ServeMux, apisList []APIConfig, enableCors bool, enableLog bool) {
-
-	for _, cfg := range apisList {
-		var handler http.HandlerFunc
-
-		if len(cfg.AuthorizationRoles) > 0 {
-			if enableCors {
-				handler = corsManager.Handler(Auth(cfg)).ServeHTTP
-			} else {
-				handler = Auth(cfg)
-			}
-		} else {
-			if enableCors {
-				handler = corsManager.Handler(http.HandlerFunc(cfg.Handler)).ServeHTTP
-			} else {
-				handler = cfg.Handler
-			}
-		}
-
-		if enableLog {
-			handler = loggingMiddleware(handler).ServeHTTP
-		}
-
-		mux.HandleFunc(cfg.Method+" "+cfg.Path, handler)
-	}
-}
-*/
 func RegisterAPIsRoutes(mux *http.ServeMux, apisList []APIConfig, enableLog bool) {
 
 	for _, cfg := range apisList {
