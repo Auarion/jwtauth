@@ -319,11 +319,22 @@ func RefreshImpl(ctx context.Context, token string, remoteAddress string, userAg
 	}
 }
 
-const UserID = "UserID"
+type key string
+
+var userKey key
 
 type UserIdentification struct {
 	Username string
 	UserId   int64
+}
+
+func newContext(ctx context.Context, u *UserIdentification) context.Context {
+	return context.WithValue(ctx, userKey, u)
+}
+
+func FromContext(ctx context.Context) (*UserIdentification, bool) {
+	u, ok := ctx.Value(userKey).(*UserIdentification)
+	return u, ok
 }
 
 // Authentication handler generation
@@ -368,7 +379,7 @@ func Auth(apiConfig APIConfig) http.HandlerFunc {
 					return
 				}
 
-				ctx := context.WithValue(r.Context(), UserID, UserIdentification{
+				ctx := newContext(r.Context(), &UserIdentification{
 					Username: username,
 					UserId:   userid,
 				})
