@@ -86,8 +86,9 @@ func (r *AuthRepository) GetUserRoles(
 
 	for rows.Next() {
 		var role string
+		var roleid int32
 
-		if err := rows.Scan(&role); err != nil {
+		if err := rows.Scan(&role, &roleid); err != nil {
 			return nil, err
 		}
 
