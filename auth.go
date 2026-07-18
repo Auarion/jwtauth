@@ -113,7 +113,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	repo := internal.Repository()
+	repo := internal.DBRepository()
 	success := false
 	var userid int64
 	var err error
@@ -163,7 +163,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 
 func LoginImpl(ctx context.Context, credentials AuthenticateUser, remoteAddress string, userAgent string) interface{} {
 
-	repo := internal.Repository()
+	repo := internal.DBRepository()
 	success := false
 	var userid int64
 	var err error
@@ -227,7 +227,7 @@ func LoginImpl(ctx context.Context, credentials AuthenticateUser, remoteAddress 
 // @Router /auth/refresh [get]
 func Refresh(w http.ResponseWriter, r *http.Request) {
 
-	repo := internal.Repository()
+	repo := internal.DBRepository()
 	var userid int64
 	success := false
 
@@ -275,7 +275,7 @@ func Refresh(w http.ResponseWriter, r *http.Request) {
 
 func RefreshImpl(ctx context.Context, token string, remoteAddress string, userAgent string) interface{} {
 
-	repo := internal.Repository()
+	repo := internal.DBRepository()
 	var userid int64
 	success := false
 
@@ -359,7 +359,7 @@ func Auth(apiConfig APIConfig) http.HandlerFunc {
 
 			if authConfig.Authorize {
 
-				repo := internal.Repository()
+				repo := internal.DBRepository()
 				username := claims.Username
 				userid := claims.Userid
 				/*

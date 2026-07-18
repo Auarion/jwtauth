@@ -97,7 +97,7 @@ type AuthRepository struct {
 
 var repo *AuthRepository
 
-func Repository() *AuthRepository {
+func DBRepository() *AuthRepository {
 	if repo == nil {
 		err := connect(dbcfg)
 

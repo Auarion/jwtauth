@@ -20,7 +20,7 @@ func TestGetUserRoles(t *testing.T) {
 		30 * time.Minute,
 	})
 
-	repo := Repository()
+	repo := DBRepository()
 
 	roles, err := repo.GetUserRoles(1)
 
