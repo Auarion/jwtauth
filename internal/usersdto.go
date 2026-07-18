@@ -10,6 +10,7 @@ type UserMapDTO struct {
 	Username string
 }
 
+/*
 func (r *AuthRepository) UserMap(
 
 	ctx context.Context,
@@ -39,6 +40,7 @@ func (r *AuthRepository) UserMap(
 
 	return userID, nil
 }
+*/
 
 type ChangePasswordDTO struct {
 	UserID         int64

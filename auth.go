@@ -25,6 +25,7 @@ type APIConfig struct {
 // Configuration
 type Claims struct {
 	Username string `json:"username"`
+	Userid   int64  `json:"userid"`
 	jwt.RegisteredClaims
 }
 
@@ -143,7 +144,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	t, refresh, refreshExpiration := generateTokens(credentials.Username)
+	t, refresh, refreshExpiration := generateTokens(credentials.Username, userid)
 
 	// store token in DB
 	err = repo.AddRefreshToken(r.Context(), internal.AddRefreshTokenDTO{
@@ -197,7 +198,7 @@ func LoginImpl(ctx context.Context, credentials AuthenticateUser, remoteAddress 
 		}
 	}
 
-	t, refresh, refreshExpiration := generateTokens(credentials.Username)
+	t, refresh, refreshExpiration := generateTokens(credentials.Username, userid)
 
 	// store token in DB
 	err = repo.AddRefreshToken(ctx, internal.AddRefreshTokenDTO{
@@ -249,12 +250,13 @@ func Refresh(w http.ResponseWriter, r *http.Request) {
 		tokenError(err, w)
 	} else {
 		username := claims.Username
-		t, refresh, refreshExpiration := generateTokens(username)
-
-		userid, _ := repo.UserMap(r.Context(), internal.UserMapDTO{
-			Username: username,
-		})
-
+		userid := claims.Userid
+		t, refresh, refreshExpiration := generateTokens(username, userid)
+		/*
+			userid, _ := repo.UserMap(r.Context(), internal.UserMapDTO{
+				Username: username,
+			})
+		*/
 		// store token in DB
 		err = repo.AddRefreshToken(r.Context(), internal.AddRefreshTokenDTO{
 			UserID:    userid,
@@ -297,12 +299,13 @@ func RefreshImpl(ctx context.Context, token string, remoteAddress string, userAg
 		return tokenErrorMsg(err)
 	} else {
 		username := claims.Username
-		t, refresh, refreshExpiration := generateTokens(username)
-
-		userid, _ := repo.UserMap(ctx, internal.UserMapDTO{
-			Username: username,
-		})
-
+		userid = claims.Userid
+		t, refresh, refreshExpiration := generateTokens(username, userid)
+		/*
+			userid, _ := repo.UserMap(ctx, internal.UserMapDTO{
+				Username: username,
+			})
+		*/
 		// store token in DB
 		err = repo.AddRefreshToken(ctx, internal.AddRefreshTokenDTO{
 			UserID:    userid,
@@ -358,14 +361,16 @@ func Auth(apiConfig APIConfig) http.HandlerFunc {
 
 				repo := internal.Repository()
 				username := claims.Username
-				userid, err := repo.UserMap(r.Context(), internal.UserMapDTO{
-					Username: username,
-				})
-				if err != nil {
-					emitError(w, http.StatusUnauthorized, "internal_error", "Username")
-					return
-				}
-
+				userid := claims.Userid
+				/*
+					userid, err := repo.UserMap(r.Context(), internal.UserMapDTO{
+						Username: username,
+					})
+					if err != nil {
+						emitError(w, http.StatusUnauthorized, "internal_error", "Username")
+						return
+					}
+				*/
 				userroles, err := repo.GetUserRoles(userid)
 				if err != nil {
 					emitError(w, http.StatusUnauthorized, "internal_error", "Get roles")
@@ -469,15 +474,15 @@ func intersection(a, b []string) []string {
 	return result
 }
 
-func generateTokens(username string) (string, string, *jwt.NumericDate) {
+func generateTokens(username string, userid int64) (string, string, *jwt.NumericDate) {
 	var refreshExpiration *jwt.NumericDate = jwt.NewNumericDate(time.Now().Add(time.Duration(authConfig.RefreshExpirationMin) * time.Minute))
 
 	exp := time.Now().Add(time.Duration(authConfig.TokenExpirationMin) * time.Minute)
-	claims := &Claims{Username: username, RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: jwt.NewNumericDate(exp)}}
+	claims := &Claims{Username: username, Userid: userid, RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: jwt.NewNumericDate(exp)}}
 	token, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(authConfig.JwtKey)
 
 	exp = time.Now().Add(time.Duration(authConfig.RefreshExpirationMin) * time.Minute)
-	claims = &Claims{Username: username, RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: refreshExpiration}}
+	claims = &Claims{Username: username, Userid: userid, RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: refreshExpiration}}
 	refresh, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(authConfig.JwtKey)
 
 	return token, refresh, refreshExpiration
