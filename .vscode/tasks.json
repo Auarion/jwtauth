@@ -43,7 +43,7 @@
                 "-d",
                 "${input:dbName}",
                 "-f",
-                "create-auth-schema.sql"
+                "auth_dump.sql"
             ],
             "options": {
                 "cwd": "${workspaceFolder}/db/postgresql",
