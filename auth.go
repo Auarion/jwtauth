@@ -24,8 +24,9 @@ type APIConfig struct {
 
 // Configuration
 type Claims struct {
-	Username string `json:"username"`
-	Userid   int64  `json:"userid"`
+	Username string   `json:"username"`
+	Userid   int64    `json:"userid"`
+	Roles    []string `json:"roles"`
 	jwt.RegisteredClaims
 }
 
@@ -36,6 +37,7 @@ type AuthConfig struct {
 	DbConfig             DBConfig
 	APIConfig            []APIConfig
 	Authorize            bool
+	TokenRoles           bool
 	LogHandler           func(http.Handler) http.Handler
 }
 
@@ -88,11 +90,13 @@ type ErrorResponse struct {
 	Message string `json:"message"`
 }
 
+/*
 func RegisterAuthRoutes(mux *http.ServeMux, basePath string) {
 	mux.HandleFunc("POST "+basePath+"/login", Login)
 	mux.HandleFunc("GET "+basePath+"/refresh", Refresh)
 }
-
+*/
+/*
 // Login
 //
 // @Summary Login request
@@ -160,6 +164,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		Refresh: refresh,
 	})
 }
+*/
 
 func LoginImpl(ctx context.Context, credentials AuthenticateUser, remoteAddress string, userAgent string) interface{} {
 
@@ -198,7 +203,13 @@ func LoginImpl(ctx context.Context, credentials AuthenticateUser, remoteAddress 
 		}
 	}
 
-	t, refresh, refreshExpiration := generateTokens(credentials.Username, userid)
+	t, refresh, refreshExpiration, err := generateTokens(repo, credentials.Username, userid)
+	if err != nil {
+		return ErrorResponse{
+			Error:   "int_error",
+			Message: "Token generation",
+		}
+	}
 
 	// store token in DB
 	err = repo.AddRefreshToken(ctx, internal.AddRefreshTokenDTO{
@@ -206,6 +217,12 @@ func LoginImpl(ctx context.Context, credentials AuthenticateUser, remoteAddress 
 		Token:     refresh,
 		ExpiresAt: refreshExpiration.Time,
 	})
+	if err != nil {
+		return ErrorResponse{
+			Error:   "int_error",
+			Message: "Token storage",
+		}
+	}
 
 	success = true
 
@@ -215,6 +232,7 @@ func LoginImpl(ctx context.Context, credentials AuthenticateUser, remoteAddress 
 	}
 }
 
+/*
 // Refresh
 //
 // @Summary Token refresh
@@ -252,11 +270,6 @@ func Refresh(w http.ResponseWriter, r *http.Request) {
 		username := claims.Username
 		userid := claims.Userid
 		t, refresh, refreshExpiration := generateTokens(username, userid)
-		/*
-			userid, _ := repo.UserMap(r.Context(), internal.UserMapDTO{
-				Username: username,
-			})
-		*/
 		// store token in DB
 		err = repo.AddRefreshToken(r.Context(), internal.AddRefreshTokenDTO{
 			UserID:    userid,
@@ -272,6 +285,7 @@ func Refresh(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 }
+*/
 
 func RefreshImpl(ctx context.Context, token string, remoteAddress string, userAgent string) interface{} {
 
@@ -300,18 +314,26 @@ func RefreshImpl(ctx context.Context, token string, remoteAddress string, userAg
 	} else {
 		username := claims.Username
 		userid = claims.Userid
-		t, refresh, refreshExpiration := generateTokens(username, userid)
-		/*
-			userid, _ := repo.UserMap(ctx, internal.UserMapDTO{
-				Username: username,
-			})
-		*/
+		t, refresh, refreshExpiration, err := generateTokens(repo, username, userid)
+		if err != nil {
+			return ErrorResponse{
+				Error:   "int_error",
+				Message: "Token generation",
+			}
+		}
+
 		// store token in DB
 		err = repo.AddRefreshToken(ctx, internal.AddRefreshTokenDTO{
 			UserID:    userid,
 			Token:     refresh,
 			ExpiresAt: refreshExpiration.Time,
 		})
+		if err != nil {
+			return ErrorResponse{
+				Error:   "int_error",
+				Message: "Token storage",
+			}
+		}
 
 		success = true
 
@@ -359,22 +381,21 @@ func Auth(apiConfig APIConfig) http.HandlerFunc {
 
 			if authConfig.Authorize {
 
-				repo := internal.DBRepository()
 				username := claims.Username
 				userid := claims.Userid
-				/*
-					userid, err := repo.UserMap(r.Context(), internal.UserMapDTO{
-						Username: username,
-					})
+
+				var userroles []string
+
+				if authConfig.TokenRoles {
+					repo := internal.DBRepository()
+
+					userroles, err = repo.GetUserRoles(userid)
 					if err != nil {
-						emitError(w, http.StatusUnauthorized, "internal_error", "Username")
+						emitError(w, http.StatusUnauthorized, "internal_error", "Get roles")
 						return
 					}
-				*/
-				userroles, err := repo.GetUserRoles(userid)
-				if err != nil {
-					emitError(w, http.StatusUnauthorized, "internal_error", "Get roles")
-					return
+				} else {
+					userroles = claims.Roles
 				}
 
 				commonRoles := intersection(userroles, apiConfig.AuthorizationRoles)
@@ -474,18 +495,30 @@ func intersection(a, b []string) []string {
 	return result
 }
 
-func generateTokens(username string, userid int64) (string, string, *jwt.NumericDate) {
+func generateTokens(repo *internal.AuthRepository, username string, userid int64) (string, string, *jwt.NumericDate, error) {
+
+	var roles = make([]string, 0)
+	var err error
+
+	if authConfig.TokenRoles {
+		roles, err = repo.GetUserRoles(userid)
+
+		if err != nil {
+			return "", "", nil, err
+		}
+	}
+
 	var refreshExpiration *jwt.NumericDate = jwt.NewNumericDate(time.Now().Add(time.Duration(authConfig.RefreshExpirationMin) * time.Minute))
 
 	exp := time.Now().Add(time.Duration(authConfig.TokenExpirationMin) * time.Minute)
-	claims := &Claims{Username: username, Userid: userid, RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: jwt.NewNumericDate(exp)}}
+	claims := &Claims{Username: username, Userid: userid, Roles: roles, RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: jwt.NewNumericDate(exp)}}
 	token, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(authConfig.JwtKey)
 
 	exp = time.Now().Add(time.Duration(authConfig.RefreshExpirationMin) * time.Minute)
-	claims = &Claims{Username: username, Userid: userid, RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: refreshExpiration}}
+	claims = &Claims{Username: username, Userid: userid, Roles: roles, RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: refreshExpiration}}
 	refresh, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(authConfig.JwtKey)
 
-	return token, refresh, refreshExpiration
+	return token, refresh, refreshExpiration, nil
 }
 
 func tokenError(err error, w http.ResponseWriter) {
