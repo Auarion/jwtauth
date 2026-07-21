@@ -54,6 +54,11 @@ type DBConfig struct {
 	MaxConnLifetime time.Duration
 }
 
+type UserRoles struct {
+	Username string   `json:"username"`
+	Roles    []string `json:"roles"`
+}
+
 var authConfig AuthConfig
 var apisMap map[string]APIConfig = make(map[string]APIConfig)
 var corsManager *cors.Cors
@@ -89,82 +94,6 @@ type ErrorResponse struct {
 	Error   string `json:"error"`
 	Message string `json:"message"`
 }
-
-/*
-func RegisterAuthRoutes(mux *http.ServeMux, basePath string) {
-	mux.HandleFunc("POST "+basePath+"/login", Login)
-	mux.HandleFunc("GET "+basePath+"/refresh", Refresh)
-}
-*/
-/*
-// Login
-//
-// @Summary Login request
-// @Description JWT authentication and tokens release
-// @Tags Authentication
-// @Accept json
-// @Produce json
-// @Param request body authdto.AuthenticateUser true "User credentials"
-// @Success 200 {object} LoginResponse
-// @Failure 401 {string} string
-// @Router /auth/login [post]
-func Login(w http.ResponseWriter, r *http.Request) {
-
-	var credentials AuthenticateUser
-
-	if err := json.NewDecoder(r.Body).Decode(&credentials); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	repo := internal.DBRepository()
-	success := false
-	var userid int64
-	var err error
-	var hashedPassword string
-
-	// audit the access at the end of the function
-	defer func() {
-		auditAccess(r.Context(), repo, userid, r.RemoteAddr, r.Header["User-Agent"][0], success, 0)
-	}()
-
-	hashedPassword, userid, err = repo.AuthenticateUser(r.Context(), internal.AuthenticateUserDTO{
-		Username: credentials.Username,
-		Password: credentials.Password,
-	})
-
-	if err != nil || hashedPassword == "" {
-		emitError(w, http.StatusUnauthorized, "auth_error", "Authentication error")
-		return
-	}
-
-	err = bcrypt.CompareHashAndPassword(
-		[]byte(hashedPassword),
-		[]byte(credentials.Password),
-	)
-
-	if err != nil {
-		emitError(w, http.StatusUnauthorized, "auth_error", "Authentication error")
-		return
-	}
-
-	t, refresh, refreshExpiration := generateTokens(credentials.Username, userid)
-
-	// store token in DB
-	err = repo.AddRefreshToken(r.Context(), internal.AddRefreshTokenDTO{
-		UserID:    userid,
-		Token:     refresh,
-		ExpiresAt: refreshExpiration.Time,
-	})
-
-	success = true
-
-	json.NewEncoder(w).Encode(LoginResponse{
-		Token:   t,
-		Refresh: refresh,
-	})
-}
-*/
 
 func LoginImpl(ctx context.Context, credentials AuthenticateUser, remoteAddress string, userAgent string) interface{} {
 
@@ -231,61 +160,6 @@ func LoginImpl(ctx context.Context, credentials AuthenticateUser, remoteAddress 
 		Refresh: refresh,
 	}
 }
-
-/*
-// Refresh
-//
-// @Summary Token refresh
-// @Description Token generation using refresh token
-// @Tags Authentication
-// @Accept
-// @Produce json
-// @Success 200 {object} LoginResponse
-// @Failure 401 {object} ErrorResponse
-// @Router /auth/refresh [get]
-func Refresh(w http.ResponseWriter, r *http.Request) {
-
-	repo := internal.DBRepository()
-	var userid int64
-	success := false
-
-	// audit the access at the end of the function
-	defer func() {
-		auditAccess(r.Context(), repo, userid, r.RemoteAddr, r.Header["User-Agent"][0], success, 1)
-	}()
-
-	token := r.Header.Get("Authorization")
-	if len(token) < 8 {
-		emitError(w, http.StatusUnauthorized, "token_format", "Invalid token format")
-		return
-	}
-
-	claims := &Claims{}
-
-	jwttoken, err := jwt.ParseWithClaims(token[7:], claims, func(t *jwt.Token) (interface{}, error) { return authConfig.JwtKey, nil })
-
-	if !jwttoken.Valid {
-		tokenError(err, w)
-	} else {
-		username := claims.Username
-		userid := claims.Userid
-		t, refresh, refreshExpiration := generateTokens(username, userid)
-		// store token in DB
-		err = repo.AddRefreshToken(r.Context(), internal.AddRefreshTokenDTO{
-			UserID:    userid,
-			Token:     refresh,
-			ExpiresAt: refreshExpiration.Time,
-		})
-
-		success = true
-
-		json.NewEncoder(w).Encode(LoginResponse{
-			Token:   t,
-			Refresh: refresh,
-		})
-	}
-}
-*/
 
 func RefreshImpl(ctx context.Context, token string, remoteAddress string, userAgent string) interface{} {
 
@@ -418,8 +292,42 @@ func Auth(apiConfig APIConfig) http.HandlerFunc {
 	}
 }
 
+func GetUserRoles(username string) (*UserRoles, error) {
+	repo := internal.DBRepository()
+
+	ret, err := repo.GetUserRolesByUsername(username)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &UserRoles{
+		Username: username,
+		Roles:    ret,
+	}, nil
+}
+
 func GetCORSHandler(mux *http.ServeMux) http.Handler {
 	return corsManager.Handler(mux)
+}
+
+func RegisterAPIsRoutes(mux *http.ServeMux, apisList []APIConfig, enableLog bool) {
+
+	for _, cfg := range apisList {
+		var handler http.HandlerFunc
+
+		if len(cfg.AuthorizationRoles) > 0 {
+			handler = Auth(cfg)
+		} else {
+			handler = cfg.Handler
+		}
+
+		if enableLog {
+			handler = loggingMiddleware(handler).ServeHTTP
+		}
+
+		mux.HandleFunc(cfg.Method+" "+cfg.Path, handler)
+	}
 }
 
 func loggingMiddleware(next http.Handler) http.Handler {
@@ -456,25 +364,6 @@ func loggingMiddleware(next http.Handler) http.Handler {
 			time.Since(start),
 		)
 	})
-}
-
-func RegisterAPIsRoutes(mux *http.ServeMux, apisList []APIConfig, enableLog bool) {
-
-	for _, cfg := range apisList {
-		var handler http.HandlerFunc
-
-		if len(cfg.AuthorizationRoles) > 0 {
-			handler = Auth(cfg)
-		} else {
-			handler = cfg.Handler
-		}
-
-		if enableLog {
-			handler = loggingMiddleware(handler).ServeHTTP
-		}
-
-		mux.HandleFunc(cfg.Method+" "+cfg.Path, handler)
-	}
 }
 
 func intersection(a, b []string) []string {

@@ -97,3 +97,32 @@ func (r *AuthRepository) GetUserRoles(
 
 	return ret, nil
 }
+
+func (r *AuthRepository) GetUserRolesByUsername(
+	username string,
+) ([]string, error) {
+
+	rows, err := r.DB.Query(
+		"SELECT * FROM "+dbcfg.AuthSchema+".auth_getuserroles_byusername($1)",
+		username,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ret []string
+
+	for rows.Next() {
+		var role string
+		var roleid int32
+
+		if err := rows.Scan(&role, &roleid); err != nil {
+			return nil, err
+		}
+
+		ret = append(ret, role)
+	}
+
+	return ret, nil
+}
