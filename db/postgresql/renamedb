@@ -1,0 +1,11 @@
+#!/bin/bash
+
+psql -U postgres -d "$1" -Atq -f rename.sql
+
+#if psql -U postgres -d "$1" -Atqc "SELECT 1 FROM pg_namespace WHERE nspname = '$2'" | grep -q 1
+#then
+#   echo Renaming...
+#    psql -U postgres -d "$1" -c "DROP SCHEMA ${2}old CASCADE ; ALTER SCHEMA $2 RENAME TO ${2}old ; drop schema $2 CASCADE"
+#   psql -U postgres -d "$1" -c "ALTER SCHEMA $2 RENAME TO ${2}old"
+#   psql -U postgres -d "$1" -c "drop schema $2 CASCADE"
+#fi
