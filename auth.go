@@ -307,6 +307,18 @@ func GetUserRoles(username string) (*UserRoles, error) {
 	}, nil
 }
 
+func GetRoles() ([]string, error) {
+	repo := internal.DBRepository()
+
+	ret, err := repo.GetRoles()
+
+	if err != nil {
+		return nil, err
+	}
+
+	return ret, nil
+}
+
 func GetCORSHandler(mux *http.ServeMux) http.Handler {
 	return corsManager.Handler(mux)
 }
