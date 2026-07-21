@@ -33,14 +33,18 @@
                 "cwd": "${workspaceFolder}/db/postgresql",
             }
         },
-       {
+        {
             "label": "rename-db",
             "type": "shell",
-            "command": "./renamedb",
+            "command": "psql",
             "args": [
+                "-U",
                 "postgres",
+                "-d",
                 "${input:dbName}",
-             ],
+                "-f",
+                "rename.sql"
+            ],
             "options": {
                 "cwd": "${workspaceFolder}/db/postgresql",
             },
