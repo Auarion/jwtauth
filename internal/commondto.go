@@ -1,6 +1,6 @@
 package internal
 
-func (r *AuthRepository) GetRoles() (map[string]int, error) {
+func (r *AuthRepository) GetRoles() ([]string, error) {
 
 	rows, err := r.DB.Query(
 		"SELECT * FROM " + dbcfg.AuthSchema + ".auth_getroles()",
@@ -10,17 +10,17 @@ func (r *AuthRepository) GetRoles() (map[string]int, error) {
 	}
 	defer rows.Close()
 
-	var ret map[string]int = make(map[string]int)
+	var ret []string
 
 	for rows.Next() {
 		var role string
-		var roleid int
+		var roleid int32
 
 		if err := rows.Scan(&role, &roleid); err != nil {
 			return nil, err
 		}
 
-		ret[role] = roleid
+		ret = append(ret, role)
 	}
 
 	return ret, nil

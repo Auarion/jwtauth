@@ -10,38 +10,6 @@ type UserMapDTO struct {
 	Username string
 }
 
-/*
-func (r *AuthRepository) UserMap(
-
-	ctx context.Context,
-	dto UserMapDTO,
-
-) (int64, error) {
-
-	var userID int64
-
-	query := `
-			CALL ` + dbcfg.AuthSchema + `.auth_user_map(
-	            $1,
-	            $2
-	        )
-		`
-
-	err := r.DB.QueryRowContext(
-		ctx,
-		query,
-		dto.Username,
-		&userID,
-	).Scan(&userID)
-
-	if err != nil {
-		return 0, err
-	}
-
-	return userID, nil
-}
-*/
-
 type ChangePasswordDTO struct {
 	UserID         int64
 	HashedPassword string
