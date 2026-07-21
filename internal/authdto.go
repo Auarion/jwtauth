@@ -158,24 +158,26 @@ func (r *AuthRepository) AddRefreshToken(
 	ctx context.Context,
 	dto AddRefreshTokenDTO,
 ) error {
+	/* DISABLED
+	   	query := `
+	           CALL ` + dbcfg.AuthSchema + `.auth_add_refresh_token(
+	               $1,
+	               $2,
+	               $3
+	           )
+	       `
 
-	query := `
-        CALL ` + dbcfg.AuthSchema + `.auth_add_refresh_token(
-            $1,
-            $2,
-            $3
-        )
-    `
+	   	_, err := r.DB.ExecContext(
+	   		ctx,
+	   		query,
+	   		dto.UserID,
+	   		dto.Token,
+	   		dto.ExpiresAt,
+	   	)
 
-	_, err := r.DB.ExecContext(
-		ctx,
-		query,
-		dto.UserID,
-		dto.Token,
-		dto.ExpiresAt,
-	)
-
-	return err
+	   	return err
+	*/
+	return nil
 }
 
 type RevokeRefreshTokenDTO struct {
