@@ -260,7 +260,7 @@ func Auth(apiConfig APIConfig) http.HandlerFunc {
 
 				var userroles []string
 
-				if authConfig.TokenRoles {
+				if !authConfig.TokenRoles {
 					repo := internal.DBRepository()
 
 					userroles, err = repo.GetUserRoles(userid)
