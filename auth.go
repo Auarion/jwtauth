@@ -253,7 +253,7 @@ func Auth(apiConfig APIConfig) http.HandlerFunc {
 			tokenError(err, w)
 		} else {
 
-			if authConfig.Authorize {
+			if authConfig.Authorize && apiConfig.AuthorizationRoles != nil && len(apiConfig.AuthorizationRoles) > 0 {
 
 				username := claims.Username
 				userid := claims.Userid
@@ -261,6 +261,8 @@ func Auth(apiConfig APIConfig) http.HandlerFunc {
 				var userroles []string
 
 				if !authConfig.TokenRoles {
+					// Read user roles from DB
+					//
 					repo := internal.DBRepository()
 
 					userroles, err = repo.GetUserRoles(userid)
@@ -335,7 +337,11 @@ func RegisterAPIsRoutes(mux *http.ServeMux, apisList []APIConfig, enableLog bool
 		}
 
 		if enableLog {
-			handler = loggingMiddleware(handler).ServeHTTP
+			if authConfig.LogHandler != nil {
+				handler = authConfig.LogHandler(handler).ServeHTTP
+			} else {
+				handler = loggingMiddleware(handler).ServeHTTP
+			}
 		}
 
 		mux.HandleFunc(cfg.Method+" "+cfg.Path, handler)

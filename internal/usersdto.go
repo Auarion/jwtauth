@@ -45,6 +45,7 @@ func (r *AuthRepository) GetUserRoles(
 		"SELECT * FROM "+dbcfg.AuthSchema+".auth_getuserroles($1)",
 		userid,
 	)
+
 	if err != nil {
 		return nil, err
 	}
@@ -53,6 +54,11 @@ func (r *AuthRepository) GetUserRoles(
 	var ret []string
 
 	for rows.Next() {
+
+		if rows.Err() != nil {
+			return nil, err
+		}
+
 		var role string
 		var roleid int32
 
@@ -82,6 +88,11 @@ func (r *AuthRepository) GetUserRolesByUsername(
 	var ret []string
 
 	for rows.Next() {
+
+		if rows.Err() != nil {
+			return nil, err
+		}
+
 		var role string
 		var roleid int32
 

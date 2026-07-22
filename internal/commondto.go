@@ -13,6 +13,11 @@ func (r *AuthRepository) GetRoles() ([]string, error) {
 	var ret []string
 
 	for rows.Next() {
+
+		if rows.Err() != nil {
+			return nil, err
+		}
+
 		var role string
 		var roleid int32
 
